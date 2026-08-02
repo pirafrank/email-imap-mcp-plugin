@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "email-imap": {
+      "command": "email-imap-mcp"
+    }
+  }
+}

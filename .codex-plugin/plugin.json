@@ -1,0 +1,19 @@
+{
+  "name": "email-imap",
+  "version": "0.1.0",
+  "description": "Email Imap plugin",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Email Imap",
+    "shortDescription": "Use Email Imap in Codex.",
+    "longDescription": "Email Imap adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Email Imap."
+  },
+  "mcpServers": "./.mcp.json"
+}
