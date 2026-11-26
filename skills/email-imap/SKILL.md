@@ -1,13 +1,13 @@
 ---
 name: email-imap
-description: Safely inspect and send mail through configured IMAP/SMTP accounts.
+description: Safely inspect mail and save drafts through configured IMAP/SMTP accounts.
 ---
 
 # email-imap
 
 Configure named accounts in `~/.config/email-imap/config.toml` and store app passwords in environment variables. Choose an account explicitly when more than one is configured.
 
-Read operations are non-destructive: folders are selected read-only and messages are fetched with `BODY.PEEK`. There are no delete, move, or flag tools. Downloads write only below the configured download directory. Sending is an external side effect and requires approval; the CLI additionally requires `--yes`.
+Read operations are non-destructive: folders are selected read-only and messages are fetched with `BODY.PEEK`. There are no delete, move, or flag tools. Downloads write only below the configured download directory. This plugin cannot send mail. To write an email, use `email_save_draft` (CLI: `email-imap draft`), which appends the message to the account's Drafts folder (auto-detected via the `\Drafts` flag, or set `drafts_folder` on the account) and returns `sent: false`. Tell the user the draft is saved so they can review and send it from their mail client. Replies can set `reply_to_uid` for threading; attachments must live under the download dir or `attachment_roots`.
 
 Supported presets: Gmail, iCloud, and Fastmail. Custom IMAP/SMTP hosts and ports may be supplied under an account's `server` table. See the repository README for the complete configuration and CLI reference.
 

@@ -15,8 +15,8 @@ def create_server(config_path=None):
     def email_read(uid: str, account: str = "", folder: str = "INBOX") -> dict: return client().read(uid, account or None, folder)
     @mcp.tool(description="Risk: downloads an attachment into the configured download directory; requires approval.")
     def email_download_attachment(uid: str, filename: str, account: str = "", folder: str = "INBOX") -> dict: return client().download(uid, filename, account or None, folder)
-    @mcp.tool(description="Write: sends plain-text mail; requires explicit user approval.")
-    def email_send(to: str, subject: str, body: str, account: str = "", cc: str = "", bcc: str = "", reply_to_uid: str = "", folder: str = "INBOX", attachments: list[str] | None = None) -> dict: return client().send(to, subject, body, account or None, cc, bcc, reply_to_uid, folder, attachments)
+    @mcp.tool(description="Write: saves a plain-text message to the account's Drafts folder for the user to review. Does NOT send; there is no send tool.")
+    def email_save_draft(to: str, subject: str, body: str, account: str = "", cc: str = "", bcc: str = "", reply_to_uid: str = "", folder: str = "INBOX", attachments: list[str] | None = None) -> dict: return client().save_draft(to, subject, body, account or None, cc, bcc, reply_to_uid, folder, attachments)
     return mcp
 
 def main():

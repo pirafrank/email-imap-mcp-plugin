@@ -15,7 +15,7 @@ def _parser():
     q = sub.add_parser("search"); common(q); q.add_argument("--folder", default="INBOX"); q.add_argument("--from", dest="from_address", default=""); q.add_argument("--to", dest="to_address", default=""); q.add_argument("--subject", default=""); q.add_argument("--text", default=""); q.add_argument("--since", default=""); q.add_argument("--before", default=""); q.add_argument("--unread", action="store_true"); q.add_argument("--max-results", type=int, default=10)
     q = sub.add_parser("read"); common(q); q.add_argument("uid"); q.add_argument("--folder", default="INBOX")
     q = sub.add_parser("download"); common(q); q.add_argument("uid"); q.add_argument("filename"); q.add_argument("--folder", default="INBOX")
-    q = sub.add_parser("send"); common(q); q.add_argument("--to", required=True); q.add_argument("--subject", default=""); q.add_argument("--body", required=True); q.add_argument("--cc", default=""); q.add_argument("--bcc", default=""); q.add_argument("--reply-to", dest="reply_to_uid", default=""); q.add_argument("--folder", default="INBOX"); q.add_argument("--attach", action="append", default=[]); q.add_argument("--yes", action="store_true")
+    q = sub.add_parser("draft"); common(q); q.add_argument("--to", default=""); q.add_argument("--subject", default=""); q.add_argument("--body", required=True); q.add_argument("--cc", default=""); q.add_argument("--bcc", default=""); q.add_argument("--reply-to", dest="reply_to_uid", default=""); q.add_argument("--folder", default="INBOX"); q.add_argument("--attach", action="append", default=[])
     return p
 
 def _print(result, as_json):
@@ -35,10 +35,8 @@ def main(argv=None):
         config = load_config(args.config)
         if args.command == "accounts":
             result = {"ok": True, "default": config.default_account, "accounts": [{"name": a.name, "address": a.address, "display_name": a.display_name} for a in config.accounts.values()]}
-        elif args.command == "send":
-            if not args.yes:
-                print("refusing to send without --yes (explicit confirmation required)", file=sys.stderr); return 2
-            result = EmailClient(config).send(args.to, args.subject, args.body, args.account, args.cc, args.bcc, args.reply_to_uid, args.folder, args.attach)
+        elif args.command == "draft":
+            result = EmailClient(config).save_draft(args.to, args.subject, args.body, args.account, args.cc, args.bcc, args.reply_to_uid, args.folder, args.attach)
         else:
             client = EmailClient(config)
             if args.command == "check": result = client.check(args.account)

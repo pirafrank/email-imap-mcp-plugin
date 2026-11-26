@@ -61,6 +61,7 @@ class Account:
     app_password: str
     display_name: str = ""
     servers: Servers = field(default_factory=lambda: Servers("", 993, "", 587))
+    drafts_folder: str = ""
 
 @dataclass(frozen=True)
 class EmailConfig:
@@ -115,7 +116,7 @@ def load_config(path: str | Path | None = None) -> EmailConfig:
         try: servers, error = resolve_servers(merged)
         except ConfigError as exc: raise ConfigError(f"account {name!r}: {exc}") from exc
         if servers is None: raise ConfigError(f"account {name!r}: {error}")
-        accounts[name] = Account(name, address, password, str(data.get("display_name", "")), servers)
+        accounts[name] = Account(name, address, password, str(data.get("display_name", "")), servers, str(data.get("drafts_folder", "")).strip())
     selected = str(defaults.get("account") or next(iter(accounts)))
     if selected not in accounts: raise ConfigError(f"default account {selected!r} is not configured")
     download = Path(str(defaults.get("download_dir", "~/Downloads/email-imap"))).expanduser().resolve()

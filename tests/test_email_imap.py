@@ -62,3 +62,18 @@ def test_check_reports_inbox_unread_count(tmp_path):
     assert result["unread_inbox"] == 2
     assert made[0].calls[0] == ("select", '"INBOX"', True)
     assert ("SEARCH", "UNSEEN", None) in made[0].calls
+
+def test_save_draft_appends_to_drafts_and_never_sends(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('''[accounts.a]\naddress = "me@example.test"\napp_password = "pw"\n[accounts.a.server]\nimap_host = "imap.example.test"\nsmtp_host = "smtp.example.test"\n''')
+    class DraftIMAP(FakeIMAP):
+        def list(self): return ("OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Drafts) "/" "Entwuerfe"'])
+        def append(self, *args): self.calls.append(("append", *args)); return ("OK", [])
+    imap = DraftIMAP()
+    def no_smtp(*_): raise AssertionError("SMTP must not be used")
+    client = EmailClient(load_config(path), imap_factory=lambda *_: imap, smtp_factory=no_smtp)
+    result = client.save_draft("you@example.test", "Hi", "body")
+    assert result["ok"] and result["sent"] is False and result["folder"] == "Entwuerfe"
+    call = [c for c in imap.calls if c[0] == "append"][0]
+    assert call[1] == '"Entwuerfe"' and call[2] == "(\\Draft)" and b"Subject: Hi" in call[4]
+    assert not hasattr(client, "send")

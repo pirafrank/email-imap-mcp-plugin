@@ -1,6 +1,6 @@
 # email-imap-mcp-plugin
 
-Standalone IMAP/SMTP access for Codex. Mailbox reads use read-only folder selection and `BODY.PEEK`; the plugin does not delete, move, or flag messages. Sending and attachment downloads are the only write-capable operations, and CLI sending requires `--yes`.
+Standalone IMAP/SMTP access for Codex. Mailbox reads use read-only folder selection and `BODY.PEEK`; the plugin does not delete, move, or flag messages. Saving drafts (to the account's Drafts folder) and attachment downloads are the only write-capable operations. The plugin cannot send mail: there is no send tool or command.
 
 ## Install
 
@@ -59,7 +59,7 @@ Standalone IMAP/SMTP access for Codex. Mailbox reads use read-only folder select
 
 If the client reports `Executable not found in $PATH: email-imap-mcp`, the install in step 1 is missing or `~/.local/bin` is not on the PATH seen by the client.
 
-MCP tools: `email_list_folders`, `email_search`, `email_read`, `email_download_attachment`, `email_send`.
+MCP tools: `email_list_folders`, `email_search`, `email_read`, `email_download_attachment`, `email_save_draft`.
 
 ## Configuration
 
@@ -75,6 +75,7 @@ attachment_roots = ["~/Documents/to-send"]
 address = "email@gmail.com"
 app_password = "${EMAIL_IMAP_PERSONAL_PASSWORD}"
 display_name = "Francesco"
+# drafts_folder = "Drafts"   # optional; auto-detected via the \Drafts IMAP flag
 
 [accounts.personal.server]
 # Optional for Gmail, iCloud, and Fastmail presets.
@@ -88,20 +89,20 @@ Supported presets are Gmail, iCloud, and Fastmail. Custom providers (e.g. Zoho: 
 
 ## CLI
 
-`check`, `folders`, `search`, `read UID`, `download UID FILENAME`, `send`, and `accounts` are available. Mailbox commands accept `--account NAME`, and all commands support `--json` for stable machine-readable output. Search supports `--from`, `--to`, `--subject`, `--text`, `--since`, `--before`, `--unread`, and `--max-results`.
+`check`, `folders`, `search`, `read UID`, `download UID FILENAME`, `draft`, and `accounts` are available. Mailbox commands accept `--account NAME`, and all commands support `--json` for stable machine-readable output. Search supports `--from`, `--to`, `--subject`, `--text`, `--since`, `--before`, `--unread`, and `--max-results`.
 
 Example:
 
 ```sh
 email-imap search --account personal --unread --json
-email-imap send --to friend@example.com --subject Hello --body 'Hi!' --yes
+email-imap draft --to friend@example.com --subject Hello --body 'Hi!'
 ```
 
-Attachments to send must be inside `download_dir` or a configured `attachment_roots` entry. Downloaded names are sanitized and collisions receive a numeric suffix.
+Attachments to include in a draft must be inside `download_dir` or a configured `attachment_roots` entry. Downloaded names are sanitized and collisions receive a numeric suffix.
 
 ## Troubleshooting
 
-Use an app password, not the normal account password. For custom providers verify IMAP/SMTP ports and whether SMTP uses STARTTLS (587) or implicit TLS (465). Configuration errors are reported on stderr with exit code 1; an unconfirmed send exits 2.
+Use an app password, not the normal account password. For custom providers verify IMAP/SMTP ports and whether SMTP uses STARTTLS (587) or implicit TLS (465). Configuration errors are reported on stderr with exit code 1.
 
 ## Credits
 

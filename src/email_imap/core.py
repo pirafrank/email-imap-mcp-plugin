@@ -1,9 +1,9 @@
 from __future__ import annotations
 import email as email_lib
-import imaplib, mimetypes, re, smtplib, ssl
+import imaplib, mimetypes, re, smtplib, ssl, time
 from email.header import decode_header
 from email.message import EmailMessage
-from email.utils import formataddr, make_msgid
+from email.utils import formataddr, formatdate, make_msgid
 from pathlib import Path
 from typing import Any, Callable
 from .config import Account, EmailConfig, Servers, resolve_servers
@@ -173,33 +173,45 @@ class EmailClient:
             payload = matches[0][1].get_payload(decode=True) or b""; target.write_bytes(payload)
             return {"ok": True, "path": str(target), "size": len(payload)}
         finally: self._close(imap)
-    def send(self, to, subject, body, account=None, cc="", bcc="", reply_to_uid="", reply_to_folder="INBOX", attachments=None):
-        acct = self.config.account(account); msg = EmailMessage(); msg["From"] = formataddr((acct.display_name, acct.address)) if acct.display_name else acct.address; msg["To"] = to
+    def _drafts_folder(self, imap, acct):
+        if acct.drafts_folder: return acct.drafts_folder
+        status, lines = imap.list(); names = []
+        if status == "OK":
+            for line in lines or []:
+                if not isinstance(line, bytes): continue
+                name = _parse_list_line(line)
+                if not name: continue
+                if rb"\Drafts" in line.split(b")",1)[0]: return name
+                names.append(name)
+        for candidate in ("Drafts", "[Gmail]/Drafts", "INBOX.Drafts", "Draft"):
+            if candidate in names: return candidate
+        return None
+    def save_draft(self, to, subject, body, account=None, cc="", bcc="", reply_to_uid="", reply_to_folder="INBOX", attachments=None):
+        """Build a message and store it in the Drafts folder. Never sends."""
+        acct = self.config.account(account); msg = EmailMessage(); msg["From"] = formataddr((acct.display_name, acct.address)) if acct.display_name else acct.address
+        if to: msg["To"] = to
         if cc: msg["Cc"] = cc
         if bcc: msg["Bcc"] = bcc
-        msg["Message-ID"] = make_msgid(domain=acct.address.rsplit("@",1)[-1])
-        if reply_to_uid:
-            imap, _ = self._imap(account)
-            try:
+        msg["Date"] = formatdate(localtime=True); msg["Message-ID"] = make_msgid(domain=acct.address.rsplit("@",1)[-1])
+        imap, _ = self._imap(account)
+        try:
+            if reply_to_uid:
                 if (error := self._select(imap, reply_to_folder)): return {"error": error}
                 status, data = imap.uid("FETCH", str(reply_to_uid), "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID REFERENCES SUBJECT)])")
                 if status != "OK" or not data or not isinstance(data[0], tuple): return {"error": f"reply target {reply_to_uid} not found in {reply_to_folder}"}
                 original = email_lib.message_from_bytes(data[0][1]); message_id = str(original.get("Message-ID", "")).strip()
                 if message_id: msg["In-Reply-To"] = message_id; msg["References"] = f"{str(original.get('References','')).strip()} {message_id}".strip()
                 if not subject: subject = decode_mime_header(original.get("Subject")); subject = subject if subject.lower().startswith("re:") else "Re: " + subject
-            finally: self._close(imap)
-        msg["Subject"] = subject; msg.set_content(body)
-        allowed = (self.config.download_dir, *self.config.attachment_roots)
-        for raw in attachments or []:
-            path = Path(raw).expanduser().resolve()
-            if not any(path == root or root in path.parents for root in allowed): return {"error": f"attachment {raw} is outside configured attachment roots"}
-            if not path.is_file(): return {"error": f"attachment not found: {raw}"}
-            ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"; main, sub = ctype.split("/",1); msg.add_attachment(path.read_bytes(), maintype=main, subtype=sub, filename=path.name)
-        try: smtp = self.smtp_factory(acct.servers.smtp_host, acct.servers.smtp_port)
-        except Exception as exc: return {"error": f"SMTP connection failed: {exc}"}
-        try: smtp.login(acct.address, acct.app_password); smtp.send_message(msg)
-        except Exception as exc: return {"error": f"send failed: {exc}"}
-        finally:
-            try: smtp.quit()
-            except Exception: pass
-        return {"ok": True, "message_id": msg["Message-ID"], "subject": subject}
+            msg["Subject"] = subject; msg.set_content(body)
+            allowed = (self.config.download_dir, *self.config.attachment_roots)
+            for raw in attachments or []:
+                path = Path(raw).expanduser().resolve()
+                if not any(path == root or root in path.parents for root in allowed): return {"error": f"attachment {raw} is outside configured attachment roots"}
+                if not path.is_file(): return {"error": f"attachment not found: {raw}"}
+                ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"; main, sub = ctype.split("/",1); msg.add_attachment(path.read_bytes(), maintype=main, subtype=sub, filename=path.name)
+            folder = self._drafts_folder(imap, acct)
+            if not folder: return {"error": "could not find a Drafts folder; set drafts_folder on the account"}
+            status, _ = imap.append(_quote(folder), "(\\Draft)", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+            if status != "OK": return {"error": f"could not save draft to {folder!r}"}
+            return {"ok": True, "saved": True, "sent": False, "folder": folder, "message_id": msg["Message-ID"], "subject": subject}
+        finally: self._close(imap)
