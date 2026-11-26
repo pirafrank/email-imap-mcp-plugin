@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 from .config import Account, EmailConfig, Servers, resolve_servers
 
-BODY_LIMIT, MAX_RESULTS, MAX_FOLDERS = 20_000, 25, 50
+BODY_LIMIT, MAX_RESULTS, MAX_FOLDERS = 20_000, 50, 50
 
 def decode_mime_header(raw: Any) -> str:
     if not raw: return ""
@@ -132,25 +132,46 @@ class EmailClient:
     def _fetch(self, imap, uid):
         status, data = imap.uid("FETCH", str(uid), "(BODY.PEEK[])")
         return email_lib.message_from_bytes(data[0][1]) if status == "OK" and data and isinstance(data[0], tuple) else None
-    def search(self, account=None, folder="INBOX", max_results=10, **filters):
+    def _summaries(self, imap, uids):
+        messages = []
+        for uid in uids:
+            status, fetched = imap.uid("FETCH", uid.decode(), "(BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)] FLAGS BODYSTRUCTURE)")
+            if status != "OK": continue
+            raw = b""; meta = b""
+            for item in fetched:
+                if isinstance(item, tuple): meta += item[0]; raw += item[1]
+                elif isinstance(item, bytes): meta += item
+            msg = email_lib.message_from_bytes(raw)
+            messages.append({"uid": uid.decode(), "date": decode_mime_header(msg.get("Date")), "from": decode_mime_header(msg.get("From")), "to": decode_mime_header(msg.get("To")), "subject": decode_mime_header(msg.get("Subject")), "unread": b"\\Seen" not in meta, "has_attachments": b"ATTACHMENT" in meta.upper()})
+        return messages
+    def search(self, account=None, folder="INBOX", max_results=50, before_uid="", **filters):
+        """Newest-first page of matches. Pass the previous page's next_before_uid as before_uid for the next page."""
         criteria, error = build_search_criteria(**filters)
         if criteria is None: return {"error": error}
+        try: cursor = int(before_uid) if str(before_uid).strip() else None
+        except ValueError: return {"error": "before_uid must be a numeric UID"}
         imap, _ = self._imap(account)
         try:
             if (error := self._select(imap, folder)): return {"error": error}
             status, data = imap.uid("SEARCH", criteria)
             if status != "OK": return {"error": "search failed"}
-            uids = (data[0] or b"").split(); limit = max(1, min(int(max_results or 10), MAX_RESULTS)); messages = []
-            for uid in reversed(uids[-limit:]):
-                status, fetched = imap.uid("FETCH", uid.decode(), "(BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)] FLAGS BODYSTRUCTURE)")
-                if status != "OK": continue
-                raw = b""; meta = b""
-                for item in fetched:
-                    if isinstance(item, tuple): meta += item[0]; raw += item[1]
-                    elif isinstance(item, bytes): meta += item
-                msg = email_lib.message_from_bytes(raw)
-                messages.append({"uid": uid.decode(), "date": decode_mime_header(msg.get("Date")), "from": decode_mime_header(msg.get("From")), "to": decode_mime_header(msg.get("To")), "subject": decode_mime_header(msg.get("Subject")), "unread": b"\\Seen" not in meta, "has_attachments": b"ATTACHMENT" in meta.upper()})
-            return {"ok": True, "folder": folder, "total_matches": len(uids), "messages": messages}
+            uids = (data[0] or b"").split(); total = len(uids)
+            if cursor is not None: uids = [u for u in uids if int(u) < cursor]
+            limit = max(1, min(int(max_results or 50), MAX_RESULTS)); page = uids[-limit:][::-1]
+            result = {"ok": True, "folder": folder, "total_matches": total, "messages": self._summaries(imap, page)}
+            if len(uids) > limit: result["next_before_uid"] = page[-1].decode()
+            return result
+        finally: self._close(imap)
+    def unread(self, account=None):
+        """All unread INBOX messages, newest first. Counts first and skips fetching when there are none."""
+        imap, acct = self._imap(account)
+        try:
+            if (error := self._select(imap, "INBOX")): return {"error": error}
+            status, data = imap.uid("SEARCH", "UNSEEN")
+            if status != "OK": return {"error": "search failed"}
+            uids = (data[0] or b"").split()
+            if not uids: return {"ok": True, "folder": "INBOX", "unread": 0, "messages": []}
+            return {"ok": True, "folder": "INBOX", "unread": len(uids), "messages": self._summaries(imap, uids[::-1])}
         finally: self._close(imap)
     def read(self, uid, account=None, folder="INBOX"):
         imap, _ = self._imap(account)

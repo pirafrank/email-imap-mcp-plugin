@@ -77,3 +77,30 @@ def test_save_draft_appends_to_drafts_and_never_sends(tmp_path):
     call = [c for c in imap.calls if c[0] == "append"][0]
     assert call[1] == '"Entwuerfe"' and call[2] == "(\\Draft)" and b"Subject: Hi" in call[4]
     assert not hasattr(client, "send")
+
+def _cfg(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('''[accounts.a]\naddress = "me@example.test"\napp_password = "pw"\n[accounts.a.server]\nimap_host = "imap.example.test"\nsmtp_host = "smtp.example.test"\n''')
+    return load_config(path)
+
+class ManyIMAP(FakeIMAP):
+    def __init__(self, n, *_): super().__init__(); self.n = n
+    def uid(self, command, uid, payload=None):
+        if command == "SEARCH": return ("OK", [" ".join(str(i) for i in range(1, self.n + 1)).encode()])
+        return super().uid(command, uid, payload)
+
+def test_search_paginates_50_at_a_time(tmp_path):
+    client = EmailClient(_cfg(tmp_path), imap_factory=lambda *_: ManyIMAP(120))
+    first = client.search(max_results=500)
+    assert len(first["messages"]) == 50 and first["messages"][0]["uid"] == "120" and first["next_before_uid"] == "71"
+    second = client.search(max_results=50, before_uid=first["next_before_uid"])
+    assert second["messages"][0]["uid"] == "70" and second["next_before_uid"] == "21"
+    last = client.search(before_uid=second["next_before_uid"])
+    assert len(last["messages"]) == 20 and "next_before_uid" not in last
+
+def test_unread_counts_then_skips_fetch_when_empty(tmp_path):
+    imap = ManyIMAP(0); imap.uid = lambda c, u, p=None: (imap.calls.append((c, u, p)) or ("OK", [b""]))
+    result = EmailClient(_cfg(tmp_path), imap_factory=lambda *_: imap).unread()
+    assert result["unread"] == 0 and result["messages"] == [] and all(c[0] == "SEARCH" for c in imap.calls if c[0] in ("SEARCH", "FETCH"))
+    result = EmailClient(_cfg(tmp_path), imap_factory=lambda *_: ManyIMAP(70)).unread()
+    assert result["unread"] == 70 and len(result["messages"]) == 70

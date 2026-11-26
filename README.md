@@ -59,7 +59,7 @@ Standalone IMAP/SMTP access for Codex. Mailbox reads use read-only folder select
 
 If the client reports `Executable not found in $PATH: email-imap-mcp`, the install in step 1 is missing or `~/.local/bin` is not on the PATH seen by the client.
 
-MCP tools: `email_list_folders`, `email_search`, `email_read`, `email_download_attachment`, `email_save_draft`.
+MCP tools: `email_list_folders`, `email_search`, `email_unread`, `email_read`, `email_download_attachment`, `email_save_draft`.
 
 ## Configuration
 
@@ -89,7 +89,7 @@ Supported presets are Gmail, iCloud, and Fastmail. Custom providers (e.g. Zoho: 
 
 ## CLI
 
-`check`, `folders`, `search`, `read UID`, `download UID FILENAME`, `draft`, and `accounts` are available. Mailbox commands accept `--account NAME`, and all commands support `--json` for stable machine-readable output. Search supports `--from`, `--to`, `--subject`, `--text`, `--since`, `--before`, `--unread`, and `--max-results`.
+`check`, `folders`, `search`, `unread`, `read UID`, `download UID FILENAME`, `draft`, and `accounts` are available. Mailbox commands accept `--account NAME`, and all commands support `--json` for stable machine-readable output. Search supports `--from`, `--to`, `--subject`, `--text`, `--since`, `--before`, `--unread`, `--max-results` (default and maximum 50), and `--before-uid`. Search is newest-first and paginated: when more results remain, the response has `next_before_uid`; pass it as `--before-uid` (MCP: `before_uid`) for the next page. `unread` lists every unread INBOX message; it counts first and skips fetching when there are none.
 
 Example:
 
