@@ -113,7 +113,10 @@ class EmailClient:
             finally:
                 try: smtp.quit()
                 except Exception: pass
-            return {"ok": True, "account": acct.name, "address": acct.address}
+            status, data = imap.uid("SEARCH", "UNSEEN")
+            if status != "OK": raise RuntimeError("could not count unread messages in INBOX")
+            unread = len(data[0].split()) if data and data[0] else 0
+            return {"ok": True, "account": acct.name, "address": acct.address, "unread_inbox": unread}
         finally: self._close(imap)
     def folders(self, account=None):
         imap, _ = self._imap(account)

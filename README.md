@@ -4,12 +4,62 @@ Standalone IMAP/SMTP access for Codex. Mailbox reads use read-only folder select
 
 ## Install
 
-```sh
-python -m pip install .
-email-imap accounts
-```
+1. Install the executables (`email-imap` and `email-imap-mcp`) onto your PATH:
 
-The Codex plugin manifest is in `.codex-plugin/`; `.mcp.json` starts the installed `email-imap-mcp` executable.
+   ```sh
+   uv tool install --reinstall .     # or: pipx install --force .
+   which email-imap-mcp              # should print a path
+   ```
+
+   Re-run with `--reinstall` / `--force` after pulling changes, otherwise the old build is kept.
+
+2. Create the config file (see [Configuration](#configuration)), then verify:
+
+   ```sh
+   email-imap check --account NAME   # reports login status and unread_inbox
+   ```
+
+3. Register the MCP server with your client. All clients just launch `email-imap-mcp` over stdio; add `--config /path/to/config.toml` after it for a non-default config. Restart the client (or start a new session) afterwards, since MCP servers load at session start.
+
+   **Claude Code** — from your project directory, either use the bundled `.mcp.json` (approve `email-imap` when prompted) or run:
+
+   ```sh
+   claude mcp add email-imap --scope user -- email-imap-mcp
+   ```
+
+   Check with `/mcp`.
+
+   **Codex** — register the server directly:
+
+   ```sh
+   codex mcp add email-imap -- email-imap-mcp
+   codex mcp list
+   ```
+
+   This writes to `~/.codex/config.toml`; the equivalent manual entry is:
+
+   ```toml
+   [mcp_servers.email-imap]
+   command = "email-imap-mcp"
+   # args = ["--config", "/path/to/config.toml"]
+   ```
+
+   The repo also contains a Codex plugin manifest in `.codex-plugin/` (with `.mcp.json` and the `skills/email-imap` skill); the direct registration above does not depend on it.
+
+   **pi** — add the server globally (`~/.pi/agent/mcp.json`) or, with `-l`, for the current project only (`.pi/mcp.json`, trusted projects only):
+
+   ```sh
+   pi mcp add email-imap -- email-imap-mcp
+   pi mcp list            # shows state, tools and errors
+   ```
+
+   Optional flags: `--description "Read mail via IMAP"` (shown in the system prompt) and `--exposure direct` (default is `codemode`; `direct` exposes each tool individually).
+
+   **Orca (orca.dev)** — Orca runs agents (Claude Code, Codex, pi, ...) in its terminals and does not have a separate MCP registry; its `orca plugin` system is for Orca UI plugins, not MCP servers. Register `email-imap-mcp` with the agent you run inside Orca using the matching section above, then start a new agent session in an Orca workspace.
+
+If the client reports `Executable not found in $PATH: email-imap-mcp`, the install in step 1 is missing or `~/.local/bin` is not on the PATH seen by the client.
+
+MCP tools: `email_list_folders`, `email_search`, `email_read`, `email_download_attachment`, `email_send`.
 
 ## Configuration
 
@@ -34,7 +84,7 @@ display_name = "Francesco"
 # smtp_port = 587
 ```
 
-Supported presets are Gmail, iCloud, and Fastmail. Custom providers must configure both hosts. Password references are resolved from the environment and are never shown by `accounts` or status output.
+Supported presets are Gmail, iCloud, and Fastmail. Custom providers (e.g. Zoho: `imap.zoho.eu`/`smtp.zoho.eu`, port 465; use `.com`, `.in`, etc. for your data center) must configure both hosts. Password references are resolved from the environment and are never shown by `accounts` or status output.
 
 ## CLI
 

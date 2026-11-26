@@ -30,7 +30,7 @@ class FakeIMAP:
     def __init__(self, *_): self.calls = []
     def login(self, *_): return ("OK", [])
     def select(self, folder, readonly=False): self.calls.append(("select", folder, readonly)); return ("OK", [b"1"])
-    def uid(self, command, uid, payload):
+    def uid(self, command, uid, payload=None):
         self.calls.append((command, uid, payload))
         if command == "SEARCH": return ("OK", [b"1 2"])
         msg = EmailMessage(); msg["From"] = "sender@example.test"; msg["Subject"] = "Hello"; msg.set_content("body")
@@ -48,3 +48,17 @@ def test_reads_are_readonly_and_peek(tmp_path):
     assert made[0].calls[0] == ("select", '"INBOX"', True)
     assert made[0].calls[1][2] == "(BODY.PEEK[])"
 
+
+def test_check_reports_inbox_unread_count(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('''[accounts.a]\naddress = "me@example.test"\napp_password = "pw"\n[accounts.a.server]\nimap_host = "i"\nsmtp_host = "s"\n''')
+    class SMTP:
+        def login(self, *_): pass
+        def quit(self): pass
+    made = []
+    def factory(*args):
+        made.append(FakeIMAP(*args)); return made[-1]
+    result = EmailClient(load_config(path), imap_factory=factory, smtp_factory=lambda *_: SMTP()).check("a")
+    assert result["unread_inbox"] == 2
+    assert made[0].calls[0] == ("select", '"INBOX"', True)
+    assert ("SEARCH", "UNSEEN", None) in made[0].calls
